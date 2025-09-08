@@ -6,8 +6,12 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/joho/godotenv v1.5.1
+	github.com/lmittmann/tint v1.1.2
+	github.com/pascaldekloe/jwt v1.12.0
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
+	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
+	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 )
 
 require (

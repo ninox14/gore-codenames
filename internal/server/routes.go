@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/ninox14/gore-codenames/internal/middleware"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -22,7 +21,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	mux.HandleFunc("/websocket", s.websocketHandler)
 
-	mws := s.CreateMWStack(middleware.CorsMiddleware)
+	mws := s.CreateMWStack(s.corsMW, s.logAccessMW, s.recoverPanicMW)
 	// Wrap the mux with CORS middleware
 	return mws(mux)
 }
