@@ -1,0 +1,5 @@
+CREATE TABLE users (
+    id UUID NOT NULL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    name TEXT NOT NULL
+);

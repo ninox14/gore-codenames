@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,13 +29,20 @@ type config struct {
 type Server struct {
 	port   int
 	logger *slog.Logger
-	db     database.Service
+	db     *database.DB
 	config config
 }
 
 func NewServer() *http.Server {
-
 	var cfg config
+	ctx := context.Background()
+
+	dbCfg := database.DefaultConfig()
+
+	db, err := database.NewDB(ctx, dbCfg)
+	if err != nil {
+		panic(err)
+	}
 
 	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8080")
 	cfg.httpPort = env.GetInt("PORT", 8080)
@@ -47,7 +55,7 @@ func NewServer() *http.Server {
 		logger: logger,
 		config: cfg,
 
-		db: database.New(),
+		db: db,
 	}
 
 	// Declare Server config
