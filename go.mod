@@ -4,16 +4,16 @@ go 1.25.1
 
 require (
 	github.com/coder/websocket v1.8.14
-	github.com/jackc/pgx-gofrs-uuid v0.0.0-20230224015001-1d428863c2e2
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.2
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
+	github.com/vgarvardt/pgx-google-uuid/v5 v5.6.0
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 )
 
 require (
-	github.com/gofrs/uuid/v5 v5.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

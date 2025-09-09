@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	pgxuuid "github.com/jackc/pgx-gofrs-uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ninox14/gore-codenames/internal/database/sqlc"
+	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
 )
 
 type DB struct {
@@ -38,7 +38,7 @@ func DefaultConfig() *DBConfig {
 	return &DBConfig{
 		Host:            os.Getenv("BLUEPRINT_DB_HOST"),
 		Port:            os.Getenv("BLUEPRINT_DB_PORT"),
-		User:            os.Getenv("BLUEPRINT_DB_DATABASE"),
+		User:            os.Getenv("BLUEPRINT_DB_USERNAME"),
 		Password:        os.Getenv("BLUEPRINT_DB_PASSWORD"),
 		DBName:          os.Getenv("BLUEPRINT_DB_DATABASE"),
 		SSLMode:         "disable",
@@ -69,7 +69,7 @@ func NewDB(ctx context.Context, config *DBConfig) (*DB, error) {
 	}
 
 	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		pgxuuid.Register(conn.TypeMap())
+		pgxUUID.Register(conn.TypeMap())
 		return nil
 	}
 

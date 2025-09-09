@@ -11,7 +11,11 @@ build:
 
 
 	@go build -o main cmd/api/main.go
-
+run-go:
+	@go run cmd/api/main.go
+run-fe:
+	@pnpm -C ./frontend install --prefer-offline
+	@pnpm -C ./frontend run dev
 # Run the application
 run:
 	@go run cmd/api/main.go &

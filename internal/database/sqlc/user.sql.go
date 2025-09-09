@@ -8,7 +8,7 @@ package sqlc
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -18,8 +18,8 @@ RETURNING id, created_at, name
 `
 
 type CreateUserParams struct {
-	ID   pgtype.UUID `db:"id" json:"id"`
-	Name string      `db:"name" json:"name"`
+	ID   uuid.UUID `db:"id" json:"id"`
+	Name string    `db:"name" json:"name"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -34,7 +34,7 @@ DELETE FROM users
 WHERE id = $1
 `
 
-func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
+func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
 }
@@ -45,7 +45,7 @@ FROM users
 WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
 	var i User
 	err := row.Scan(&i.ID, &i.CreatedAt, &i.Name)
@@ -86,8 +86,8 @@ RETURNING id, created_at, name
 `
 
 type UpdateUserNameParams struct {
-	ID   pgtype.UUID `db:"id" json:"id"`
-	Name string      `db:"name" json:"name"`
+	ID   uuid.UUID `db:"id" json:"id"`
+	Name string    `db:"name" json:"name"`
 }
 
 func (q *Queries) UpdateUserName(ctx context.Context, arg UpdateUserNameParams) error {

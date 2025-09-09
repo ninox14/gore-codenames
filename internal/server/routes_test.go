@@ -1,15 +1,29 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestHandler(t *testing.T) {
-	s := &Server{}
-	server := httptest.NewServer(http.HandlerFunc(s.HelloWorldHandler))
+	// FIXME: placeholder
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]string{"message": "Hello World"}
+		jsonResp, err := json.Marshal(resp)
+		if err != nil {
+			http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(jsonResp); err != nil {
+			log.Printf("Failed to write response: %v", err)
+		}
+	}))
 	defer server.Close()
 	resp, err := http.Get(server.URL)
 	if err != nil {

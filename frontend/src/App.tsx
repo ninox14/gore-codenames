@@ -1,15 +1,24 @@
 import { useState } from 'react';
-
+const API_BASE_URL = `http://localhost:${import.meta.env.VITE_PORT}`;
 function App() {
   const [count, setCount] = useState(0);
   const [message, setMessage] = useState<string>('');
 
   const fetchData = () => {
-    fetch(`http://localhost:${import.meta.env.VITE_PORT}/`)
+    fetch(API_BASE_URL)
       .then((response) => response.text())
       .then((data) => setMessage(data))
       .catch((error) => console.error('Error fetching data:', error));
   };
+
+  const postUser = () =>
+    fetch(`${API_BASE_URL}/users`, {
+      method: 'POST',
+      body: JSON.stringify({ Name: 'NewUser1' }),
+    })
+      .then((r) => r.json())
+      .then(console.log)
+      .catch(console.error);
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -38,6 +47,13 @@ function App() {
               className="block w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md transition-colors"
             >
               Fetch from Server
+            </button>
+
+            <button
+              onClick={postUser}
+              className="block w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+            >
+              post user
             </button>
 
             {message && (
