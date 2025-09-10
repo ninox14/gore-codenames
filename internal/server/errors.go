@@ -7,6 +7,8 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/ninox14/gore-codenames/internal/database/lib"
 	"github.com/ninox14/gore-codenames/internal/response"
 	"github.com/ninox14/gore-codenames/internal/validator"
 )
@@ -66,6 +68,10 @@ func (s *Server) invalidAuthenticationToken(w http.ResponseWriter, r *http.Reque
 	headers.Set("WWW-Authenticate", "Bearer")
 
 	s.errorMessage(w, r, http.StatusUnauthorized, "Invalid authentication token", headers)
+}
+func (s *Server) invalidAuthenticationTokenWithUserId(w http.ResponseWriter, r *http.Request, userId uuid.UUID) {
+	lib.QuietFindAndDeleteUserById(r.Context(), s.db.Queries, userId)
+	s.invalidAuthenticationToken(w, r)
 }
 
 func (s *Server) authenticationRequired(w http.ResponseWriter, r *http.Request) {

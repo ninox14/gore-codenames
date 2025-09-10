@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/ninox14/gore-codenames/internal/response"
+	"github.com/pascaldekloe/jwt"
 
 	"github.com/tomasen/realip"
 )
@@ -75,71 +79,71 @@ func (s *Server) logAccessMW(next http.Handler) http.Handler {
 	})
 }
 
-// TODO: needs db access
-// func (s *Server) authenticate(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.Header().Add("Vary", "Authorization")
+func (s *Server) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Vary", "Authorization")
 
-// 		authorizationHeader := r.Header.Get("Authorization")
+		authorizationHeader := r.Header.Get("Authorization")
 
-// 		if authorizationHeader != "" {
-// 			headerParts := strings.Split(authorizationHeader, " ")
+		if authorizationHeader == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		headerParts := strings.Split(authorizationHeader, " ")
 
-// 			if len(headerParts) == 2 && headerParts[0] == "Bearer" {
-// 				token := headerParts[1]
+		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		token := headerParts[1]
 
-// 				claims, err := jwt.HMACCheck([]byte(token), []byte(s.config.jwt.secretKey))
-// 				if err != nil {
-// 					s.invalidAuthenticationToken(w, r)
-// 					return
-// 				}
+		claims, err := jwt.HMACCheck([]byte(token), []byte(s.config.jwt.secretKey))
+		if err != nil {
+			s.invalidAuthenticationToken(w, r)
+			return
+		}
 
-// 				if !claims.Valid(time.Now()) {
-// 					s.invalidAuthenticationToken(w, r)
-// 					return
-// 				}
+		userID, err := uuid.Parse(claims.Subject)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 
-// 				if claims.Issuer != s.config.baseURL {
-// 					s.invalidAuthenticationToken(w, r)
-// 					return
-// 				}
+		if !claims.Valid(time.Now()) {
+			s.invalidAuthenticationTokenWithUserId(w, r, userID)
+			return
+		}
 
-// 				if !claims.AcceptAudience(s.config.baseURL) {
-// 					s.invalidAuthenticationToken(w, r)
-// 					return
-// 				}
+		if claims.Issuer != s.config.baseURL {
+			s.invalidAuthenticationTokenWithUserId(w, r, userID)
+			return
+		}
 
-// 				userID, err := strconv.Atoi(claims.Subject)
-// 				if err != nil {
-// 					s.serverError(w, r, err)
-// 					return
-// 				}
+		if !claims.AcceptAudience(s.config.baseURL) {
+			s.invalidAuthenticationTokenWithUserId(w, r, userID)
+			return
+		}
 
-// 				user, found, err := s.db.GetUser(userID)
-// 				if err != nil {
-// 					s.serverError(w, r, err)
-// 					return
-// 				}
+		user, err := s.db.Queries.GetUserByID(r.Context(), userID)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 
-// 				if found {
-// 					// r = contextSetAuthenticatedUser(r, user)
-// 				}
-// 			}
-// 		}
+		r = contextSetAuthenticatedUser(r, user)
+		next.ServeHTTP(w, r)
+	})
+}
 
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
+func (s *Server) requireAuthenticatedUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, found := contextGetAuthenticatedUser(r)
 
-// func (s *Server) requireAuthenticatedUser(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		_, found := contextGetAuthenticatedUser(r)
+		if !found {
+			s.authenticationRequired(w, r)
+			return
+		}
 
-// 		if !found {
-// 			s.authenticationRequired(w, r)
-// 			return
-// 		}
-
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
+		next.ServeHTTP(w, r)
+	})
+}
