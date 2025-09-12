@@ -10,7 +10,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	mux.HandleFunc("/health", s.healthHandler)
 	mux.Handle("/websocket", s.requireAuthenticatedUser(http.HandlerFunc(s.websocketHandler)))
 
-	mux.HandleFunc("POST /users", s.createUser)
+	mux.HandleFunc("POST /user", s.createUser)
+	mux.Handle("GET /user/me", s.requireAuthenticatedUser(http.HandlerFunc(s.getUserData)))
 	mux.HandleFunc("POST /token", s.createAuthenticationToken)
 
 	mws := s.CreateMWStack(s.corsMW, s.logAccessMW, s.recoverPanicMW, s.authenticate)

@@ -91,46 +91,46 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		}
 		headerParts := strings.Split(authorizationHeader, " ")
 
-		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		token := headerParts[1]
+		if len(headerParts) == 2 && headerParts[0] == "Bearer" {
+			token := headerParts[1]
 
-		claims, err := jwt.HMACCheck([]byte(token), []byte(s.config.jwt.secretKey))
-		if err != nil {
-			s.invalidAuthenticationToken(w, r)
-			return
+			claims, err := jwt.HMACCheck([]byte(token), []byte(s.config.jwt.secretKey))
+			s.logger.Debug("JWT CLAIMS", "calims", claims, "error ", err)
+
+			if err != nil {
+				s.invalidAuthenticationToken(w, r)
+				return
+			}
+
+			userID, err := uuid.Parse(claims.Subject)
+			if err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+
+			if !claims.Valid(time.Now()) {
+				s.invalidAuthenticationTokenWithUserId(w, r, userID)
+				return
+			}
+
+			if claims.Issuer != s.config.baseURL {
+				s.invalidAuthenticationTokenWithUserId(w, r, userID)
+				return
+			}
+
+			if !claims.AcceptAudience(s.config.baseURL) {
+				s.invalidAuthenticationTokenWithUserId(w, r, userID)
+				return
+			}
+			user, err := s.db.Queries.GetUserByID(r.Context(), userID)
+			if err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+
+			r = contextSetAuthenticatedUser(r, user)
 		}
 
-		userID, err := uuid.Parse(claims.Subject)
-		if err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-
-		if !claims.Valid(time.Now()) {
-			s.invalidAuthenticationTokenWithUserId(w, r, userID)
-			return
-		}
-
-		if claims.Issuer != s.config.baseURL {
-			s.invalidAuthenticationTokenWithUserId(w, r, userID)
-			return
-		}
-
-		if !claims.AcceptAudience(s.config.baseURL) {
-			s.invalidAuthenticationTokenWithUserId(w, r, userID)
-			return
-		}
-
-		user, err := s.db.Queries.GetUserByID(r.Context(), userID)
-		if err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-
-		r = contextSetAuthenticatedUser(r, user)
 		next.ServeHTTP(w, r)
 	})
 }

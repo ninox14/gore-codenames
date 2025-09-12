@@ -35,9 +35,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name string `json:"Name"`
 	}
-	var v struct {
-		Validator validator.Validator `json:"-"`
-	}
+	var v validator.Validator
 
 	err := request.DecodeJSON(w, r, &input)
 
@@ -46,10 +44,10 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v.Validator.CheckField(input.Name != "", "Name", "Name is required")
+	v.CheckField(input.Name != "", "Name", "Name is required")
 
-	if v.Validator.HasErrors() {
-		s.failedValidation(w, r, v.Validator)
+	if v.HasErrors() {
+		s.failedValidation(w, r, v)
 		return
 	}
 
@@ -101,13 +99,14 @@ func (s *Server) createAuthenticationToken(w http.ResponseWriter, r *http.Reques
 	var claims jwt.Claims
 	claims.Subject = user.ID.String()
 
-	expiry := time.Now().Add(24 * time.Hour)
-	claims.Issued = jwt.NewNumericTime(time.Now())
-	claims.NotBefore = jwt.NewNumericTime(time.Now())
-	claims.Expires = jwt.NewNumericTime(expiry)
+	expiry := time.Now().Add(7 * 24 * time.Hour)
+	claims.Issued = jwt.NewNumericTime(time.Now().Round(time.Second))
+	claims.NotBefore = jwt.NewNumericTime(time.Now().Round(time.Second))
+	claims.Expires = jwt.NewNumericTime(expiry.Round(time.Second))
 
 	claims.Issuer = s.config.baseURL
 	claims.Audiences = []string{s.config.baseURL}
+	s.logger.Log(r.Context(), slog.LevelDebug, "Current secret", "secret", s.config.jwt.secretKey, "length", len([]byte(s.config.jwt.secretKey))*8)
 
 	jwtBytes, err := claims.HMACSign(jwt.HS256, []byte(s.config.jwt.secretKey))
 	if err != nil {
@@ -124,6 +123,12 @@ func (s *Server) createAuthenticationToken(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		s.serverError(w, r, err)
 	}
+}
+
+func (s *Server) getUserData(w http.ResponseWriter, r *http.Request) {
+	user, _ := contextGetAuthenticatedUser(r)
+
+	response.JSON(w, http.StatusOK, user)
 }
 
 // TODO: Use socket io
