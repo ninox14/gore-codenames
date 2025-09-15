@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,7 @@ func (s *Server) CreateMWStack(xs ...Middleware) Middleware {
 
 func (s *Server) corsMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// FIXME: change cors origin on deploy
 		// Set CORS headers
 		w.Header().Set("Access-Control-Allow-Origin", "*") // Replace "*" with specific origins if needed
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
@@ -79,8 +81,37 @@ func (s *Server) logAccessMW(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) validateTokenClaims(w http.ResponseWriter, r *http.Request, claims *jwt.Claims) error {
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		s.serverError(w, r, err)
+		return err
+	}
+
+	if !claims.Valid(time.Now()) {
+		s.invalidAuthenticationTokenWithUserId(w, r, userID)
+		return errors.New("expired token")
+	}
+
+	if claims.Issuer != s.config.baseURL {
+		s.invalidAuthenticationTokenWithUserId(w, r, userID)
+		return errors.New("invalid issuer")
+	}
+
+	if !claims.AcceptAudience(s.config.baseURL) {
+		s.invalidAuthenticationTokenWithUserId(w, r, userID)
+		return errors.New("unacceptable audience")
+	}
+	return nil
+}
+
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scheme := r.URL.Scheme
+		if scheme == "ws" || scheme == "wss" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		w.Header().Add("Vary", "Authorization")
 
 		authorizationHeader := r.Header.Get("Authorization")
@@ -95,39 +126,24 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			token := headerParts[1]
 
 			claims, err := jwt.HMACCheck([]byte(token), []byte(s.config.jwt.secretKey))
-			s.logger.Debug("JWT CLAIMS", "calims", claims, "error ", err)
 
 			if err != nil {
 				s.invalidAuthenticationToken(w, r)
 				return
 			}
-
-			userID, err := uuid.Parse(claims.Subject)
+			err = s.validateTokenClaims(w, r, claims)
 			if err != nil {
-				s.serverError(w, r, err)
+				// Error response gets handled by validateTokenClaims
 				return
 			}
 
-			if !claims.Valid(time.Now()) {
-				s.invalidAuthenticationTokenWithUserId(w, r, userID)
-				return
-			}
+			userID, _ := uuid.Parse(claims.Subject)
 
-			if claims.Issuer != s.config.baseURL {
-				s.invalidAuthenticationTokenWithUserId(w, r, userID)
-				return
-			}
-
-			if !claims.AcceptAudience(s.config.baseURL) {
-				s.invalidAuthenticationTokenWithUserId(w, r, userID)
-				return
-			}
 			user, err := s.db.Queries.GetUserByID(r.Context(), userID)
 			if err != nil {
 				s.serverError(w, r, err)
 				return
 			}
-
 			r = contextSetAuthenticatedUser(r, user)
 		}
 
