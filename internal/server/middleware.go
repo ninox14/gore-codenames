@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -81,49 +80,27 @@ func (s *Server) logAccessMW(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) validateTokenClaims(w http.ResponseWriter, r *http.Request, claims *jwt.Claims) error {
-	userID, err := uuid.Parse(claims.Subject)
-	if err != nil {
-		s.serverError(w, r, err)
-		return err
-	}
-
-	if !claims.Valid(time.Now()) {
-		s.invalidAuthenticationTokenWithUserId(w, r, userID)
-		return errors.New("expired token")
-	}
-
-	if claims.Issuer != s.config.baseURL {
-		s.invalidAuthenticationTokenWithUserId(w, r, userID)
-		return errors.New("invalid issuer")
-	}
-
-	if !claims.AcceptAudience(s.config.baseURL) {
-		s.invalidAuthenticationTokenWithUserId(w, r, userID)
-		return errors.New("unacceptable audience")
-	}
-	return nil
-}
-
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		scheme := r.URL.Scheme
-		if scheme == "ws" || scheme == "wss" {
-			next.ServeHTTP(w, r)
-			return
-		}
 		w.Header().Add("Vary", "Authorization")
 
 		authorizationHeader := r.Header.Get("Authorization")
+		tokenParam := r.URL.Query().Get("token")
+		isWebsocket := r.Header.Get("Upgrade") == "websocket"
 
-		if authorizationHeader == "" {
+		if (!isWebsocket && authorizationHeader == "") || (isWebsocket && tokenParam == "") {
 			next.ServeHTTP(w, r)
 			return
 		}
-		headerParts := strings.Split(authorizationHeader, " ")
 
-		if len(headerParts) == 2 && headerParts[0] == "Bearer" {
-			token := headerParts[1]
+		headerParts := strings.Split(authorizationHeader, " ")
+		if (len(headerParts) == 2 && headerParts[0] == "Bearer") || isWebsocket {
+			var token string
+			if isWebsocket {
+				token = tokenParam
+			} else {
+				token = headerParts[1]
+			}
 
 			claims, err := jwt.HMACCheck([]byte(token), []byte(s.config.jwt.secretKey))
 
@@ -131,14 +108,27 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				s.invalidAuthenticationToken(w, r)
 				return
 			}
-			err = s.validateTokenClaims(w, r, claims)
+
+			userID, err := uuid.Parse(claims.Subject)
 			if err != nil {
-				// Error response gets handled by validateTokenClaims
+				s.serverError(w, r, err)
 				return
 			}
 
-			userID, _ := uuid.Parse(claims.Subject)
+			if !claims.Valid(time.Now()) {
+				s.invalidAuthenticationTokenWithUserId(w, r, userID)
+				return
+			}
 
+			if claims.Issuer != s.config.baseURL {
+				s.invalidAuthenticationTokenWithUserId(w, r, userID)
+				return
+			}
+
+			if !claims.AcceptAudience(s.config.baseURL) {
+				s.invalidAuthenticationTokenWithUserId(w, r, userID)
+				return
+			}
 			user, err := s.db.Queries.GetUserByID(r.Context(), userID)
 			if err != nil {
 				s.serverError(w, r, err)

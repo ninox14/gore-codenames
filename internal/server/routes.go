@@ -8,7 +8,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", s.healthHandler)
-	mux.Handle("/websocket", s.requireAuthenticatedUser(http.HandlerFunc(s.websocketHandler)))
+	mux.HandleFunc("/ws", s.websocketHandler)
 
 	mux.HandleFunc("POST /user", s.createUser)
 	mux.Handle("GET /user/me", s.requireAuthenticatedUser(http.HandlerFunc(s.getUserData)))

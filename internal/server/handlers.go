@@ -1,15 +1,17 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 
-	"fmt"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
 	"github.com/ninox14/gore-codenames/internal/database/sqlc"
 	"github.com/ninox14/gore-codenames/internal/request"
@@ -126,29 +128,79 @@ func (s *Server) createAuthenticationToken(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) getUserData(w http.ResponseWriter, r *http.Request) {
-	user, _ := contextGetAuthenticatedUser(r)
-
+	user, ok := contextGetAuthenticatedUser(r)
+	if !ok {
+		s.serverError(w, r, fmt.Errorf("failed to retrieve user data from request context"))
+		return
+	}
 	response.JSON(w, http.StatusOK, user)
 }
 
-// TODO: Use socket io
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
-	socket, err := websocket.Accept(w, r, nil)
-	if err != nil {
-		http.Error(w, "Failed to open websocket", http.StatusInternalServerError)
+	_, ok := contextGetAuthenticatedUser(r)
+	if !ok {
+		s.logger.Error("Could not get authed user")
+		s.invalidAuthenticationToken(w, r)
 		return
 	}
-	defer socket.Close(websocket.StatusGoingAway, "Server closing websocket")
+
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+	})
+
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 
 	ctx := r.Context()
-	socketCtx := socket.CloseRead(ctx)
+	defer c.CloseNow()
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				log.Println("Sending protocol-level ping...")
+
+				// Send WebSocket protocol-level ping
+				pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+				err := c.Ping(pingCtx)
+				pingCancel()
+
+				if err != nil {
+					log.Printf("Ping failed: %v", err)
+					return
+				}
+				log.Println("Protocol-level ping sent successfully")
+			}
+		}
+	}()
 
 	for {
-		payload := fmt.Sprintf("server timestamp: %d", time.Now().UnixNano())
-		if err := socket.Write(socketCtx, websocket.MessageText, []byte(payload)); err != nil {
-			log.Printf("Failed to write to socket: %v", err)
-			break
+		var msg Message
+		err := wsjson.Read(ctx, c, &msg)
+
+		switch websocket.CloseStatus(err) {
+		case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+			return
 		}
-		time.Sleep(2 * time.Second)
+		if err != nil {
+			s.logger.Error("JSON unmarshal error", "error", err)
+			continue
+		}
+
+		s.logger.Debug("Incoming message", "message", msg)
+		switch msg.Type {
+		case MsgJoinLobby:
+			wsjson.Write(ctx, c, msg)
+
+		default:
+			wsjson.Write(ctx, c, msg)
+		}
 	}
 }
