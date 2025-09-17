@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -137,7 +136,7 @@ func (s *Server) getUserData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
-	_, ok := contextGetAuthenticatedUser(r)
+	user, ok := contextGetAuthenticatedUser(r)
 	if !ok {
 		s.logger.Error("Could not get authed user")
 		s.invalidAuthenticationToken(w, r)
@@ -145,6 +144,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		// FIXME: add origin check on deploy
 		InsecureSkipVerify: true,
 	})
 
@@ -154,32 +154,9 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	defer c.CloseNow()
+	defer c.Close(websocket.StatusGoingAway, "Normal closure")
 
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				log.Println("Sending protocol-level ping...")
-
-				// Send WebSocket protocol-level ping
-				pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
-				err := c.Ping(pingCtx)
-				pingCancel()
-
-				if err != nil {
-					log.Printf("Ping failed: %v", err)
-					return
-				}
-				log.Println("Protocol-level ping sent successfully")
-			}
-		}
-	}()
+	go websocketPingLoop(ctx, c, user.ID, *s.logger)
 
 	for {
 		var msg Message
@@ -195,12 +172,6 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logger.Debug("Incoming message", "message", msg)
-		switch msg.Type {
-		case MsgJoinLobby:
-			wsjson.Write(ctx, c, msg)
-
-		default:
-			wsjson.Write(ctx, c, msg)
-		}
+		processWSMessage(ctx, &msg, c)
 	}
 }
