@@ -24,6 +24,11 @@ export function saveToken(tokenResponse?: TokenResponse) {
   );
 }
 
+export function removeToken() {
+  localStorage.removeItem(TOKEN_EXPIRY_LS_KEY);
+  localStorage.removeItem(TOKEN_LS_KEY);
+}
+
 export function getLSToken(): string | undefined {
   const token = localStorage.getItem(TOKEN_LS_KEY);
   if (!token) return;

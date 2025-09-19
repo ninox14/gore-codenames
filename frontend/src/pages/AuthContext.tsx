@@ -1,8 +1,9 @@
 import { getCurrentUserData, getToken } from '@/api';
-import { getLSToken, saveToken } from '@/lib/utils';
+import { getLSToken, removeToken, saveToken } from '@/lib/utils';
 import type { UserResponse } from '@/types';
 
 import React, { createContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 type UserState = UserResponse | null;
@@ -25,7 +26,7 @@ export function AuthContextProvider({
   children: React.ReactNode;
 }) {
   const [currentUser, setCurrentUser] = useState<UserState>(null);
-
+  const navigate = useNavigate();
   async function fetchUserData() {
     const token = getLSToken();
     if (!token) {
@@ -35,9 +36,13 @@ export function AuthContextProvider({
     }
     const user = await getCurrentUserData();
 
-    if (user) {
-      setCurrentUser(user);
+    if (!user) {
+      removeToken();
+      navigate('/');
+      return;
     }
+
+    setCurrentUser(user);
   }
 
   async function onSuccessfullUserCreate(
@@ -50,9 +55,15 @@ export function AuthContextProvider({
       toast.error('Could not get token');
       return;
     }
-    // TODO: use /user/me instead
-    setCurrentUser(user);
     saveToken(tokenResponse);
+    const userData = await getCurrentUserData();
+    if (!userData) {
+      removeToken();
+      navigate('/');
+      return;
+    }
+
+    setCurrentUser(user);
     onSuccess?.();
   }
 
