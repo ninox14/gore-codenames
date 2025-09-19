@@ -14,3 +14,14 @@ sql:
             go_type:
               import: 'github.com/google/uuid'
               type: 'UUID'
+          - db_type: 'uuid'
+            go_type:
+              import: 'github.com/google/uuid'
+              type: 'UUID'
+              pointer: true
+            nullable: true
+          - column: 'games.game_state'
+            go_type:
+              import: 'github.com/ninox14/gore-codenames/internal/database/dto'
+              type: 'GameState'
+              pointer: true

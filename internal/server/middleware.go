@@ -131,7 +131,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			}
 			user, err := s.db.Queries.GetUserByID(r.Context(), userID)
 			if err != nil {
-				s.serverError(w, r, err)
+				s.invalidAuthenticationToken(w, r)
 				return
 			}
 			r = contextSetAuthenticatedUser(r, user)

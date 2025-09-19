@@ -5,12 +5,78 @@
 package sqlc
 
 import (
+	"database/sql/driver"
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/ninox14/gore-codenames/internal/database/dto"
 )
+
+type GameStatus string
+
+const (
+	GameStatusInitial  GameStatus = "Initial"
+	GameStatusStarted  GameStatus = "Started"
+	GameStatusFinished GameStatus = "Finished"
+)
+
+func (e *GameStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = GameStatus(s)
+	case string:
+		*e = GameStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for GameStatus: %T", src)
+	}
+	return nil
+}
+
+type NullGameStatus struct {
+	GameStatus GameStatus `json:"game_status"`
+	Valid      bool       `json:"valid"` // Valid is true if GameStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullGameStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.GameStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.GameStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullGameStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.GameStatus), nil
+}
+
+type Game struct {
+	ID         uuid.UUID        `db:"id" json:"id"`
+	HostID     uuid.UUID        `db:"host_id" json:"host_id"`
+	CreatedAt  pgtype.Timestamp `db:"created_at" json:"created_at"`
+	StartedAt  pgtype.Timestamp `db:"started_at" json:"started_at"`
+	Status     GameStatus       `db:"status" json:"status"`
+	WordPackID int32            `db:"word_pack_id" json:"word_pack_id"`
+	GameState  *dto.GameState   `db:"game_state" json:"game_state"`
+}
 
 type User struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	Name      string             `db:"name" json:"name"`
+}
+
+type Wordpack struct {
+	ID          int32       `db:"id" json:"id"`
+	Name        string      `db:"name" json:"name"`
+	Description pgtype.Text `db:"description" json:"description"`
+	CreatedBy   *uuid.UUID  `db:"created_by" json:"created_by"`
+	IsDefault   pgtype.Bool `db:"is_default" json:"is_default"`
+	Words       []string    `db:"words" json:"words"`
 }
