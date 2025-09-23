@@ -4,3 +4,7 @@ export type TokenResponse = {
   AuthenticationToken: string;
   AuthenticationTokenExpiry: string;
 };
+
+export type NewGameResponse = {
+  game_id: string;
+};

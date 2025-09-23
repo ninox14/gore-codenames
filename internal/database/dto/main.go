@@ -16,7 +16,7 @@ type GameStatePlayer struct {
 
 type Clue struct {
 	Word   string `json:"word"`
-	Number int8   `json:"number"`
+	Number int    `json:"number"`
 }
 
 type Team struct {
@@ -26,16 +26,18 @@ type Team struct {
 }
 
 type BoardSize struct {
-	X int8 `json:"x"`
-	Y int8 `json:"y"`
+	X int `json:"x"`
+	Y int `json:"y"`
 }
+
 type Board struct {
-	Size            BoardSize   `json:"size"`
-	CurrentBoard    []string    `json:"current_board"`
-	GuessedIndexs   []int8      `json:"guessed_indexes"`
-	AssassinIndexs  []int8      `json:"assassin_indexes"`
-	TurnOrder       []TeamColor `json:"turn_order"`
-	MaxWordsPerTeam int         `json:"max_words_per_team"`
+	Size            *BoardSize          `json:"size"`
+	CurrentBoard    []string            `json:"current_board"`
+	GuessedIndexs   []int               `json:"guessed_indexes"`
+	AssassinIndexs  []int               `json:"assassin_indexes"`
+	TurnOrder       []TeamColor         `json:"turn_order"`
+	MaxWordsPerTeam int                 `json:"max_words_per_team"`
+	WordsByTeam     map[TeamColor][]int `json:"words_by_team"`
 }
 
 type GameState struct {

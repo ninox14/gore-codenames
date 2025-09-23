@@ -20,3 +20,9 @@ func QuietFindAndDeleteUserById(ctx context.Context, queries *sqlc.Queries, user
 		return
 	}
 }
+
+func QuietDeleteGame(ctx context.Context, q *sqlc.Queries, gameId uuid.UUID) {
+	if err := q.DeleteGame(ctx, gameId); err != nil {
+		return
+	}
+}

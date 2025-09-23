@@ -41,19 +41,39 @@ services:
       POSTGRES_USER: ${BLUEPRINT_DB_USERNAME}
       POSTGRES_PASSWORD: ${BLUEPRINT_DB_PASSWORD}
     ports:
-      - "${BLUEPRINT_DB_PORT}:5432"
+      - '${BLUEPRINT_DB_PORT}:5432'
     volumes:
       - psql_volume_bp:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "sh -c 'pg_isready -U ${BLUEPRINT_DB_USERNAME} -d ${BLUEPRINT_DB_DATABASE}'"]
+      test:
+        [
+          'CMD-SHELL',
+          "sh -c 'pg_isready -U ${BLUEPRINT_DB_USERNAME} -d ${BLUEPRINT_DB_DATABASE}'",
+        ]
       interval: 5s
       timeout: 5s
       retries: 3
       start_period: 15s
     networks:
       - blueprint
+  redis-stack:
+    image: redis/redis-stack:latest
+    restart: unless-stopped
+    ports:
+      - '6379:6379' # Redis server
+      - '8001:8001' # RedisInsight
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
+    volumes:
+      - redis-data:/data # Persistent storage for Redis data
+    # environment: #add indent
+    # Optional: Set a password for Redis
+    # - REDIS_ARGS="--requirepass your_strong_password"
+    # Optional: Configure Redis persistence if desired
+    # - REDIS_ARGS="--appendonly yes"
 
 volumes:
   psql_volume_bp:
+  redis-data:
 networks:
   blueprint:

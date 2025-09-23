@@ -1,6 +1,6 @@
 import { up } from 'up-fetch';
 import { getLSToken } from '../lib/utils';
-import type { TokenResponse, UserResponse } from '../types';
+import type { NewGameResponse, TokenResponse, UserResponse } from '../types';
 
 if (!import.meta.env.VITE_API_BASE_URL) {
   throw new Error('API base url is not defined in env');
@@ -48,5 +48,16 @@ export async function getToken({ name, id }: UserResponse) {
     return tokenResponse;
   } catch (err) {
     console.error('Failed to get user token', err);
+  }
+}
+
+export async function createNewGame() {
+  try {
+    const gameResponse = await api<NewGameResponse>('/game/new', {
+      method: 'POST',
+    });
+    return gameResponse;
+  } catch (err) {
+    console.error('Failed to create new game', err);
   }
 }

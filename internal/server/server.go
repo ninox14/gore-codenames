@@ -9,6 +9,7 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/lmittmann/tint"
 	"github.com/ninox14/gore-codenames/internal/database"
@@ -29,8 +30,9 @@ type config struct {
 type Server struct {
 	port   int
 	logger *slog.Logger
-	db     *database.DB
 	config config
+	db     *database.DB
+	rdb    *redis.Client
 }
 
 func NewServer() *http.Server {
@@ -43,7 +45,17 @@ func NewServer() *http.Server {
 	if err != nil {
 		panic(err)
 	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     env.GetString("REDIS_HOST", "localhost:6379"),
+		Password: "", // FIXME: add credentials on deploy
+		DB:       0,
+	})
 
+	_, err = rdb.Ping(ctx).Result()
+	if err != nil {
+		fmt.Printf("Failed to connect to Redis: %v\n", err)
+		panic(err)
+	}
 	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8080")
 	cfg.httpPort = env.GetInt("PORT", 8080)
 	cfg.cookie.secretKey = env.GetString("COOKIE_SECRET_KEY", "d4q4sl5zd3exvpfnn5eu776ghd4up2z6")
@@ -55,7 +67,8 @@ func NewServer() *http.Server {
 		logger: logger,
 		config: cfg,
 
-		db: db,
+		db:  db,
+		rdb: rdb,
 	}
 
 	// Declare Server config

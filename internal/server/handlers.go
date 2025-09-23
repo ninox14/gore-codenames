@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
+	"github.com/ninox14/gore-codenames/internal/database/lib"
 	"github.com/ninox14/gore-codenames/internal/database/sqlc"
 	"github.com/ninox14/gore-codenames/internal/request"
 	"github.com/ninox14/gore-codenames/internal/response"
@@ -133,6 +135,50 @@ func (s *Server) getUserData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, user)
+}
+
+func (s *Server) createNewGame(w http.ResponseWriter, r *http.Request) {
+	user, ok := contextGetAuthenticatedUser(r)
+	if !ok {
+		s.serverError(w, r, errors.New("failed to retrieve user data from request context"))
+		return
+	}
+	initGameState, err := GetInitialGameState(r.Context(), &user, s.db, s.logger)
+	if err != err {
+		s.serverError(w, r, err)
+		return
+	}
+	gameId := uuid.New()
+
+	_, err = s.db.Queries.CreateGame(r.Context(), sqlc.CreateGameParams{
+		ID:         gameId,
+		HostID:     user.ID,
+		WordPackID: initGameState.WordPackID,
+		GameState:  initGameState,
+	})
+
+	if err != nil {
+		s.serverError(w, r, err)
+		lib.QuietDeleteGame(r.Context(), s.db.Queries, gameId)
+		return
+	}
+
+	redisKey := fmt.Sprintf("game:%s", gameId)
+
+	// TODO: change redis game expiry
+	err = s.rdb.JSONSet(r.Context(), redisKey, "$", initGameState).Err()
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+
+	resp := struct {
+		GameID uuid.UUID `json:"game_id"`
+	}{
+		GameID: gameId,
+	}
+
+	response.JSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
