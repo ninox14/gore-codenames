@@ -94,10 +94,6 @@ func (g *Game) GetGameStateFromRedis(ctx context.Context) dto.GameState {
 	return gs[0]
 }
 
-// func (g *Game) AddPlayerToSpectator(ctx context.Context, p Player) {
-// 	g.AddPlayerRedisSide()
-// }
-
 func (g *Game) broadcast(ctx context.Context, msg Message) {
 	for _, player := range g.Players {
 		if player.Conn != nil {
@@ -113,7 +109,6 @@ func (g *Game) broadcast(ctx context.Context, msg Message) {
 func (g *Game) AddPlayer(ctx context.Context, player Player) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// TODO: add player to GS in redis
 	player.GameID = g.ID
 	player.LastSeen = time.Now()
 
@@ -189,7 +184,6 @@ func (g *Game) AddPlayerToGameState(ctx context.Context, path RedisPlayersPath, 
 	}
 
 	// Append only if not found
-	// _, err := rdb.Do(ctx, "JSON.ARRAPPEND", key, "."+path, toJSON(player)).Result()
 	jsonPlayer, err := json.Marshal(GameHubPlayerToGameStatePlayer(player))
 	if err != nil {
 		return err
@@ -228,14 +222,14 @@ func (h *GameHub) GetOrCreateGame(gameId uuid.UUID) *Game {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if lobby, exists := h.games[gameId]; exists {
-		return lobby
+	if game, exists := h.games[gameId]; exists {
+		return game
 	}
 
-	lobby := NewGame(gameId, h)
-	h.games[gameId] = lobby
+	game := NewGame(gameId, h)
+	h.games[gameId] = game
 	h.logger.Debug("Created new lobby:", "gameId", gameId)
-	return lobby
+	return game
 }
 
 func (h *GameHub) RemoveGame(gameID uuid.UUID) {
