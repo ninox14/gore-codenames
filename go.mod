@@ -9,6 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.2
 	github.com/pascaldekloe/jwt v1.12.0
+	github.com/redis/go-redis/v9 v9.14.0
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
 	github.com/vgarvardt/pgx-google-uuid/v5 v5.6.0
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
@@ -20,7 +21,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/redis/go-redis/v9 v9.14.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
