@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -199,7 +200,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
+	ctx := context.Background()
 	defer c.Close(websocket.StatusGoingAway, "Normal closure")
 
 	go websocketPingLoop(ctx, c, user.ID, *s.logger)
@@ -214,10 +215,10 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			s.logger.Error("JSON unmarshal error", "error", err)
-			continue
+			break
 		}
 
 		s.logger.Debug("Incoming message", "message", msg)
-		processWSMessage(ctx, &msg, c)
+		processWSMessage(ctx, &msg, c, user, s.gh)
 	}
 }

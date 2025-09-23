@@ -35,7 +35,7 @@ func GetInitialGameState(ctx context.Context, user *sqlc.User, db *database.DB, 
 	board := InitBoardStateFromWordPack(wordpack, DefaultMaxWordsPerTeam, DefaultAssassinCount, GetDefaultBoardSize())
 
 	teams := make(map[dto.TeamColor]*dto.Team)
-
+	// TODO: make it less bad
 	teams[dto.TeamColorBlue] = CreateEmptyTeam()
 	teams[dto.TeamColorRed] = CreateEmptyTeam()
 	return &dto.GameState{

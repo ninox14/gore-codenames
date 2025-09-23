@@ -1,41 +1,93 @@
 import { useNavigate, useParams } from 'react-router';
-import useGameWS from '../useWebsocket';
-import { useEffect } from 'react';
+import {
+  useWebSocket,
+  type ClientMessage,
+  type ServerMessage,
+} from '../useWebsocket';
+import { useEffect, useState } from 'react';
 import { makeWsUrlWithToken } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import type { GameState } from '@/types';
+
+function OnSocketOpen(socket: WebSocket, msg: ClientMessage) {
+  socket.send(JSON.stringify(msg));
+}
 
 function Game() {
   let { gameId } = useParams();
   const navigate = useNavigate();
-  const { ws, status } = useGameWS(makeWsUrlWithToken());
+
+  // TODO: handle case when you didnt get game state
+  const [gameState, setGameState] = useState<GameState>();
 
   // FIXME: better gameId parameter validation
   if (!gameId) {
     navigate('/game');
     return null;
   }
+  const { lastMessage, isConnected } = useWebSocket<
+    ClientMessage,
+    ServerMessage
+  >(makeWsUrlWithToken(), {
+    reconnect: false,
+    onOpenCallback: (socket) =>
+      OnSocketOpen(socket, {
+        type: 'join_game',
+        data: undefined,
+        game_id: gameId,
+      }),
+  });
 
   useEffect(() => {
-    if (!ws) {
-      console.log('WEBSOCKET IS NOT CONNECTED', ws);
-      return;
+    if (!lastMessage) return;
+
+    switch (lastMessage.type) {
+      case 'game_state':
+        setGameState(lastMessage.data);
+        console.log('Game state update:', lastMessage.data);
+        break;
+      case 'error':
+        console.error('Error:', lastMessage.data);
+        break;
     }
-  }, []);
+  }, [lastMessage]);
 
-  function sendSomething() {
-    ws?.send(JSON.stringify({ type: 'bla-bla', data: 'ARBITRARY DATA ' }));
-  }
-
-  console.log(status);
   return (
     <>
       <div className="max-w-md mx-auto space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-100 mb-2">Game</h1>
           <p className="text-gray-50">We are in a game</p>
-          <Button className="mt-3" onClick={sendSomething}>
-            SEND SMTHING{' '}
-          </Button>
+          <p>Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
+
+          <div className="flex flex-col">
+            <div className="">
+              <p>Spectators:</p>
+              <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
+                {gameState?.spectators.map((player) => `${player.name}, `)}
+              </pre>
+            </div>
+            <div className="">
+              <p>Team blue:</p>
+              <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
+                {gameState?.teams.blue.players.map(
+                  (player) => `${player.name}, `
+                )}
+              </pre>
+            </div>
+            <div className="">
+              <p>Team red:</p>
+              <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
+                {gameState?.teams.red.players.map(
+                  (player) => `${player.name}, `
+                )}
+              </pre>
+            </div>
+
+            <p>Board:</p>
+            <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
+              {JSON.stringify(gameState?.board, null, 2)}
+            </pre>
+          </div>
         </div>
       </div>
     </>

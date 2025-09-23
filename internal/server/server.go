@@ -33,6 +33,7 @@ type Server struct {
 	config config
 	db     *database.DB
 	rdb    *redis.Client
+	gh     *GameHub
 }
 
 func NewServer() *http.Server {
@@ -62,6 +63,7 @@ func NewServer() *http.Server {
 	cfg.jwt.secretKey = env.GetString("JWT_SECRET_KEY", "5il7lpknmngmaklaquxzzfz7x5on3pxf")
 
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+	gh := NewGameHub(logger, db, rdb)
 	NewServer := &Server{
 		port:   cfg.httpPort,
 		logger: logger,
@@ -69,6 +71,7 @@ func NewServer() *http.Server {
 
 		db:  db,
 		rdb: rdb,
+		gh:  gh,
 	}
 
 	// Declare Server config
