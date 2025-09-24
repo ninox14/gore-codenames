@@ -190,6 +190,13 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gameIdStr := r.URL.Query().Get("gameId") // or however you pass it
+	gameId, err := uuid.Parse(gameIdStr)
+	if err != nil {
+		s.badRequest(w, r, err)
+		return
+	}
+
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		// FIXME: add origin check on deploy
 		InsecureSkipVerify: true,
@@ -199,11 +206,18 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-
 	ctx := context.Background()
-	defer c.Close(websocket.StatusGoingAway, "Normal closure")
 
-	go websocketPingLoop(ctx, c, user.ID, *s.logger)
+	defer func() {
+		// Remove player from game when connection closes
+		game := s.gh.GetGame(gameId)
+		if game != nil {
+			game.RemovePlayer(ctx, user.ID)
+		}
+		c.Close(websocket.StatusGoingAway, "Normal closure")
+	}()
+
+	go websocketPingLoop(ctx, c, user.ID, gameId, s.gh)
 
 	for {
 		var msg Message

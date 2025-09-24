@@ -98,6 +98,14 @@ export function useWebSocket<
     }
   }, []);
 
+  const close = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    } else {
+      console.warn('WebSocket not connected');
+    }
+  }, []);
+
   useEffect(() => {
     connect();
     return () => {
@@ -107,5 +115,5 @@ export function useWebSocket<
     };
   }, [connect]);
 
-  return { isConnected, lastMessage, send };
+  return { isConnected, lastMessage, send, close };
 }

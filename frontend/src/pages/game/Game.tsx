@@ -7,6 +7,7 @@ import {
 import { useEffect, useState } from 'react';
 import { makeWsUrlWithToken } from '@/lib/utils';
 import type { GameState } from '@/types';
+import { Button } from '@/components/ui/button';
 
 function OnSocketOpen(socket: WebSocket, msg: ClientMessage) {
   socket.send(JSON.stringify(msg));
@@ -24,10 +25,10 @@ function Game() {
     navigate('/game');
     return null;
   }
-  const { lastMessage, isConnected } = useWebSocket<
+  const { lastMessage, isConnected, close } = useWebSocket<
     ClientMessage,
     ServerMessage
-  >(makeWsUrlWithToken(), {
+  >(makeWsUrlWithToken(gameId), {
     reconnect: false,
     onOpenCallback: (socket) =>
       OnSocketOpen(socket, {
@@ -58,7 +59,9 @@ function Game() {
           <h1 className="text-4xl font-bold text-gray-100 mb-2">Game</h1>
           <p className="text-gray-50">We are in a game</p>
           <p>Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
-
+          <Button className="my-3" onClick={close}>
+            CLOSE CONNECTION
+          </Button>
           <div className="flex flex-col">
             <div className="">
               <p>Spectators:</p>

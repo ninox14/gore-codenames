@@ -36,12 +36,14 @@ export function getLSToken(): string | undefined {
   return token;
 }
 
-export function makeWsUrlWithToken() {
+export function makeWsUrlWithToken(gameId: string) {
   // FIXME: use wss protocol on deploy
   const wsUrl = import.meta.env.VITE_WS_ENDPOINT;
 
   const token = getLSToken();
 
-  return `${wsUrl}?token=${token ? token.split(' ')[1] : ''}`;
+  return `${wsUrl}?token=${token ? token.split(' ')[1] : ''}&gameId=${
+    gameId ? gameId : ''
+  }`;
   // return `${wsUrl}?token=${''}`;
 }

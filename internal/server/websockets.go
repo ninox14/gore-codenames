@@ -39,7 +39,7 @@ const (
 type Message struct {
 	Type   MessageType `json:"type"`
 	Data   any         `json:"data"`
-	GameID uuid.UUID   `json:"game_id,omitempty"`
+	GameID *uuid.UUID  `json:"game_id,omitempty"`
 }
 
 type Player struct {
@@ -178,7 +178,7 @@ func (g *Game) AddPlayerToGameState(ctx context.Context, path RedisPlayersPath, 
 		}
 		if res != "[]" && res != "null" {
 			// Do nothing cause player player already in lobby
-			fmt.Printf("player %s already exists in %s %v", player.ID, p, res)
+			g.hub.logger.Info("Player already exists in", "player", player.ID, "path", p, "jsonGet", res)
 			return nil
 		}
 	}
@@ -232,6 +232,12 @@ func (h *GameHub) GetOrCreateGame(gameId uuid.UUID) *Game {
 	return game
 }
 
+func (gh *GameHub) GetGame(gameId uuid.UUID) *Game {
+	gh.mu.RLock()
+	defer gh.mu.RUnlock()
+	return gh.games[gameId]
+}
+
 func (h *GameHub) RemoveGame(gameID uuid.UUID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -242,7 +248,7 @@ func (h *GameHub) RemoveGame(gameID uuid.UUID) {
 	}
 }
 
-func websocketPingLoop(ctx context.Context, c *websocket.Conn, userId uuid.UUID, logger slog.Logger) {
+func websocketPingLoop(ctx context.Context, c *websocket.Conn, userId uuid.UUID, gameId uuid.UUID, hub *GameHub) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -257,7 +263,11 @@ func websocketPingLoop(ctx context.Context, c *websocket.Conn, userId uuid.UUID,
 			pingCancel()
 
 			if err != nil {
-				logger.Error("Failed ping for", "userId", userId.String())
+				hub.logger.Error("Failed ping for", "userId", userId.String())
+				game := hub.GetGame(gameId)
+				if game != nil {
+					game.RemovePlayer(ctx, userId)
+				}
 				c.Close(websocket.StatusAbnormalClosure, "Failed ping response")
 				return
 			}
@@ -268,8 +278,8 @@ func websocketPingLoop(ctx context.Context, c *websocket.Conn, userId uuid.UUID,
 func processWSMessage(ctx context.Context, msg *Message, c *websocket.Conn, user sqlc.User, hub *GameHub) {
 	switch msg.Type {
 	case MsgJoinGame:
-		game := hub.GetOrCreateGame(msg.GameID)
-		player := Player{ID: user.ID, Name: user.Name, Conn: c, GameID: msg.GameID, LastSeen: time.Now()}
+		game := hub.GetOrCreateGame(*msg.GameID)
+		player := Player{ID: user.ID, Name: user.Name, Conn: c, GameID: *msg.GameID, LastSeen: time.Now()}
 		game.AddPlayer(ctx, player)
 	default:
 		wsjson.Write(ctx, c, msg)
