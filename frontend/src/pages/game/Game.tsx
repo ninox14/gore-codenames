@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router';
 import {
   useWebSocket,
+  type ClientEventMap,
   type ClientMessage,
   type ServerMessage,
 } from '../useWebsocket';
@@ -25,7 +26,7 @@ function Game() {
     navigate('/game');
     return null;
   }
-  const { lastMessage, isConnected, close } = useWebSocket<
+  const { lastMessage, isConnected, close, send } = useWebSocket<
     ClientMessage,
     ServerMessage
   >(makeWsUrlWithToken(gameId), {
@@ -37,6 +38,10 @@ function Game() {
         game_id: gameId,
       }),
   });
+
+  function handleMovePlayer(data: ClientEventMap['change_team']) {
+    send({ type: 'change_team', data, game_id: gameId });
+  }
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -63,22 +68,49 @@ function Game() {
             CLOSE CONNECTION
           </Button>
           <div className="flex flex-col">
-            <div className="">
-              <p>Spectators:</p>
+            <div className="flex flex-col">
+              <div className="flex space-x-2">
+                <p>Spectators</p>
+                <Button
+                  onClick={() =>
+                    handleMovePlayer({ destination: 'spectators' })
+                  }
+                >
+                  Join
+                </Button>
+              </div>
               <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
                 {gameState?.spectators.map((player) => `${player.name}, `)}
               </pre>
             </div>
-            <div className="">
-              <p>Team blue:</p>
+            <div className="flex flex-col">
+              <div className="flex space-x-2">
+                <p>Team blue</p>
+                <Button
+                  onClick={() =>
+                    handleMovePlayer({ destination: 'teams.blue.players' })
+                  }
+                >
+                  Join
+                </Button>
+              </div>
               <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
                 {gameState?.teams.blue.players.map(
                   (player) => `${player.name}, `
                 )}
               </pre>
             </div>
-            <div className="">
-              <p>Team red:</p>
+            <div className="flex flex-col">
+              <div className="flex space-x-2">
+                <p>Team red</p>
+                <Button
+                  onClick={() =>
+                    handleMovePlayer({ destination: 'teams.red.players' })
+                  }
+                >
+                  Join
+                </Button>
+              </div>
               <pre className="rounded-md border border-blue-900 bg-slate-950 p-3">
                 {gameState?.teams.red.players.map(
                   (player) => `${player.name}, `

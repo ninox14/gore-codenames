@@ -1,6 +1,9 @@
 import type { GameState } from '@/types';
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+export const teamColors = ['blue', 'red'] as const;
+export type TeamColors = (typeof teamColors)[number];
+
 // --- Server -> Client events ---
 export interface ServerEventMap {
   // join_game: { playerId: string; name: string };
@@ -14,6 +17,10 @@ export interface ClientEventMap {
   join_game: undefined;
   leave_game: { playerId: string };
   request_state: { gameId: string };
+  change_team: {
+    destination: string;
+    // destination_color: TeamColors
+  };
 }
 
 // --- Utility type: build discriminated union automatically ---

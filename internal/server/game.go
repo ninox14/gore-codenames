@@ -23,7 +23,7 @@ func GetDefaultBoardSize() *dto.BoardSize {
 }
 
 func CreateEmptyTeam() *dto.Team {
-	return &dto.Team{CaptainID: nil, Players: make([]dto.GameStatePlayer, 0)}
+	return &dto.Team{CaptainID: nil, Players: make([]dto.GameStatePlayer, 0), Clues: make([]*dto.Clue, 0)}
 }
 
 func GetInitialGameState(ctx context.Context, user *sqlc.User, db *database.DB, logger *slog.Logger) (*dto.GameState, error) {

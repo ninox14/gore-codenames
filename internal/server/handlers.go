@@ -206,14 +206,16 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	ctx := context.Background()
-
+	bgCtx := context.Background()
+	ctx, cancel := context.WithCancel(bgCtx)
 	defer func() {
 		// Remove player from game when connection closes
 		game := s.gh.GetGame(gameId)
 		if game != nil {
 			game.RemovePlayer(ctx, user.ID)
 		}
+		s.logger.Debug("Closed with canceling context")
+		cancel()
 		c.Close(websocket.StatusGoingAway, "Normal closure")
 	}()
 
@@ -225,6 +227,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 		switch websocket.CloseStatus(err) {
 		case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+			s.logger.Debug("Normal closure")
 			return
 		}
 		if err != nil {

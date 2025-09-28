@@ -17,9 +17,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type MessageType string
-
 type RedisPlayersPath string
+
+func (rpp RedisPlayersPath) MarshalBinary() ([]byte, error) {
+	return json.Marshal(rpp)
+}
 
 const (
 	SpectatorsPath RedisPlayersPath = "spectators"
@@ -27,19 +29,66 @@ const (
 	TeamBluePath   RedisPlayersPath = "teams.blue.players"
 )
 
+type MessageType string
+
 const (
-	MsgJoinGame     MessageType = "join_game"
-	MsgLeaveGame    MessageType = "leave_game"
-	MsgGameState    MessageType = "game_state"
-	MsgPlayerJoined MessageType = "player_joined"
-	MsgPlayerLeft   MessageType = "player_left"
-	MsgError        MessageType = "error"
+	MsgJoinGame MessageType = "join_game"
+	// MsgLeaveGame MessageType = "leave_game"
+	MsgGameState  MessageType = "game_state"
+	MsgChangeTeam MessageType = "change_team"
+	// MsgPlayerJoined MessageType = "player_joined"
+	// MsgPlayerLeft   MessageType = "player_left"
+	MsgError MessageType = "error"
 )
+
+type ChangeTeamData struct {
+	Destination RedisPlayersPath `json:"destination"`
+}
 
 type Message struct {
 	Type   MessageType `json:"type"`
 	Data   any         `json:"data"`
 	GameID *uuid.UUID  `json:"game_id,omitempty"`
+}
+
+func (m *Message) UnmarshalJSON(data []byte) error {
+	// First unmarshal into a temporary struct to get the type
+	var temp struct {
+		Type   MessageType     `json:"type"`
+		Data   json.RawMessage `json:"data"`
+		GameID *uuid.UUID      `json:"game_id,omitempty"`
+	}
+
+	if err := json.Unmarshal(data, &temp); err != nil {
+		return err
+	}
+
+	m.Type = temp.Type
+	m.GameID = temp.GameID
+
+	if len(temp.Data) == 0 {
+		m.Data = nil
+		return nil
+	}
+
+	// Based on the type, unmarshal data into the correct struct
+	switch temp.Type {
+	case MsgChangeTeam:
+		var changeTeamData ChangeTeamData
+		if err := json.Unmarshal(temp.Data, &changeTeamData); err != nil {
+			return err
+		}
+		m.Data = changeTeamData
+	default:
+		// For other types, unmarshal as map[string]any
+		var genericData map[string]any
+		if err := json.Unmarshal(temp.Data, &genericData); err != nil {
+			return err
+		}
+		m.Data = genericData
+	}
+
+	return nil
 }
 
 type Player struct {
@@ -50,11 +99,22 @@ type Player struct {
 	LastSeen time.Time       `json:"-"`
 }
 
+func GameHubPlayerToGameStatePlayer(p *Player) dto.GameStatePlayer {
+	return dto.GameStatePlayer{
+		ID:   p.ID,
+		Name: p.Name,
+	}
+}
+
 type Game struct {
 	ID      uuid.UUID
 	Players map[uuid.UUID]*Player
 	mu      sync.RWMutex
 	hub     *GameHub
+}
+
+func (g *Game) GetRedisGameKey() string {
+	return fmt.Sprintf("game:%s", g.ID)
 }
 
 func NewGame(id uuid.UUID, hub *GameHub) *Game {
@@ -65,15 +125,25 @@ func NewGame(id uuid.UUID, hub *GameHub) *Game {
 	}
 }
 
-func GameHubPlayerToGameStatePlayer(p *Player) dto.GameStatePlayer {
-	return dto.GameStatePlayer{
-		ID:   p.ID,
-		Name: p.Name,
+func (g *Game) GetGameHubPlayer(playerId uuid.UUID) *Player {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	player := g.Players[playerId]
+
+	if player == nil {
+		return nil
 	}
+
+	player.LastSeen = time.Now()
+
+	g.Players[playerId] = player
+
+	return player
 }
 
 func (g *Game) GetGameStateFromRedis(ctx context.Context) dto.GameState {
-	gameKey := g.RedisGameKey()
+	gameKey := g.GetRedisGameKey()
 	gameState, err := g.hub.rdb.JSONGet(ctx, gameKey, "$").Result()
 
 	if err != nil {
@@ -106,22 +176,14 @@ func (g *Game) broadcast(ctx context.Context, msg Message) {
 	}
 }
 
-func (g *Game) AddPlayer(ctx context.Context, player Player) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	player.GameID = g.ID
-	player.LastSeen = time.Now()
+func (g *Game) broadcastErrorMessage(ctx context.Context, msg string, err error) {
+	g.hub.logger.Error(msg, "error", err)
 
-	g.Players[player.ID] = &player
-
-	err := g.AddPlayerToGameState(ctx, SpectatorsPath, &player)
-	if err != nil {
-		g.hub.logger.Error("Error adding player to reddis state", "err", err)
-		g.broadcastErrorMessage(ctx, "Error adding player to reddis state", err)
-		return
-	}
-	// Broadcast updated game state to all players in lobby
-	g.broadcastGameState(ctx)
+	data := struct {
+		Message string `json:"message"`
+		Err     string `json:"err"`
+	}{Message: msg, Err: err.Error()}
+	g.broadcast(ctx, Message{Type: MsgError, Data: data})
 }
 
 func (g *Game) broadcastGameState(ctx context.Context) {
@@ -131,6 +193,42 @@ func (g *Game) broadcastGameState(ctx context.Context) {
 		Type: MsgGameState,
 		Data: gameState,
 	})
+}
+
+func (g *Game) AddPlayer(ctx context.Context, player Player) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	player.GameID = g.ID
+	player.LastSeen = time.Now()
+
+	g.Players[player.ID] = &player
+
+	err := g.AddPlayerToGS(ctx, SpectatorsPath, &player)
+	if err != nil {
+		g.hub.logger.Error("Error adding player to reddis state", "err", err)
+		g.broadcastErrorMessage(ctx, "Error adding player to reddis state", err)
+		return
+	}
+	// Broadcast updated game state to all players in lobby
+	g.broadcastGameState(ctx)
+}
+
+func (g *Game) ChangePlayerTeam(ctx context.Context, playerId uuid.UUID, changeTeamData ChangeTeamData) {
+	player := g.GetGameHubPlayer(playerId)
+
+	if player == nil {
+		g.broadcastErrorMessage(ctx, "Trying to move non existant player", fmt.Errorf("Player %s doesnt exist in game %s", playerId, g.ID))
+		return
+	}
+
+	err := g.ChangePlayerTeamGS(ctx, player, changeTeamData.Destination)
+
+	if err != nil {
+		g.broadcastErrorMessage(ctx, "Could not change team for player in game state", err)
+		return
+	}
+
+	g.broadcastGameState(ctx)
 }
 
 func (g *Game) RemovePlayer(ctx context.Context, playerID uuid.UUID) {
@@ -163,11 +261,11 @@ func (g *Game) RemovePlayer(ctx context.Context, playerID uuid.UUID) {
 	}
 }
 
-// AddPlayerToGameState checks in Redis with JSONPath, then adds
-func (g *Game) AddPlayerToGameState(ctx context.Context, path RedisPlayersPath, player *Player) error {
+// AddPlayerToGS checks in Redis with JSONPath, then adds
+func (g *Game) AddPlayerToGS(ctx context.Context, path RedisPlayersPath, player *Player) error {
 	// TODO: add getter for viable paths if more than two teams
 	paths := []RedisPlayersPath{SpectatorsPath, TeamBluePath, TeamRedPath}
-	key := g.RedisGameKey()
+	key := g.GetRedisGameKey()
 	for _, p := range paths {
 		// Query directly in Redis
 		jsonPath := fmt.Sprintf("$.%s[?(@.id==\"%s\")]", p, player.ID)
@@ -194,16 +292,58 @@ func (g *Game) AddPlayerToGameState(ctx context.Context, path RedisPlayersPath, 
 	return err
 }
 
-func (g *Game) broadcastErrorMessage(ctx context.Context, msg string, err error) {
-	data := struct {
-		Message string `json:"message"`
-		Err     error  `json:"err"`
-	}{Message: msg, Err: err}
-	g.broadcast(ctx, Message{Type: MsgError, Data: data})
-}
+func (g *Game) ChangePlayerTeamGS(ctx context.Context, player *Player, destPath RedisPlayersPath) error {
+	script := redis.NewScript(`
+	local key          = KEYS[1]
+	local playerId     = ARGV[1]
+	local playerJson   = ARGV[2]
+	local destination  = ARGV[3]
 
-func (g *Game) RedisGameKey() string {
-	return fmt.Sprintf("game:%s", g.ID)
+	-- Always remove player from spectators
+	redis.call("JSON.DEL", key, string.format("$.spectators[?(@.id == '%s')]", playerId))
+
+	-- Remove from red team players
+	redis.call("JSON.DEL", key, string.format("$.teams.red.players[?(@.id == '%s')]", playerId))
+
+	-- Remove from blue team players
+	redis.call("JSON.DEL", key, string.format("$.teams.blue.players[?(@.id == '%s')]", playerId))
+
+	-- Remove captain role if player was captain
+	local redCaptain = redis.call("JSON.GET", key, "$.teams.red.captain_id")
+	if redCaptain ~= nil and redCaptain ~= "null" then
+		redCaptain = string.sub(redCaptain, 2, -2) -- strip quotes
+		if redCaptain == playerId then
+				redis.call("JSON.SET", key, "$.teams.red.captain_id", "null")
+		end
+	end
+
+	local blueCaptain = redis.call("JSON.GET", key, "$.teams.blue.captain_id")
+	if blueCaptain ~= nil and blueCaptain ~= "null" then
+		blueCaptain = string.sub(blueCaptain, 2, -2) -- strip quotes
+		if blueCaptain == playerId then
+				redis.call("JSON.SET", key, "$.teams.blue.captain_id", "null")
+		end
+	end
+
+	-- Append to destination array
+	if string.sub(destination, 1, 1) == '"' then
+		destination = string.sub(destination, 2, -2)
+	end
+
+	local destPath = "$." .. destination
+	redis.call("JSON.ARRAPPEND", key, destPath, playerJson)
+
+	return true`)
+
+	playerJSON, _ := json.Marshal(player)
+
+	_, err := script.Run(ctx, g.hub.rdb, []string{g.GetRedisGameKey()},
+		player.ID.String(),
+		string(playerJSON),
+		destPath, // e.g. ".teams.red.players"
+	).Result()
+
+	return err
 }
 
 type GameHub struct {
@@ -281,6 +421,16 @@ func processWSMessage(ctx context.Context, msg *Message, c *websocket.Conn, user
 		game := hub.GetOrCreateGame(*msg.GameID)
 		player := Player{ID: user.ID, Name: user.Name, Conn: c, GameID: *msg.GameID, LastSeen: time.Now()}
 		game.AddPlayer(ctx, player)
+	case MsgChangeTeam:
+		game := hub.GetOrCreateGame(*msg.GameID)
+		movePlayerData, ok := msg.Data.(ChangeTeamData)
+
+		if !ok {
+			game.broadcastErrorMessage(ctx, "Invalid Move player data", fmt.Errorf("unable to type cast data field %v, %T", msg.Data, msg.Data))
+			return
+		}
+
+		game.ChangePlayerTeam(ctx, user.ID, movePlayerData)
 	default:
 		wsjson.Write(ctx, c, msg)
 	}
