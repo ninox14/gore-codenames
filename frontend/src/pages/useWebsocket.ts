@@ -1,4 +1,5 @@
-import type { GameState } from '@/types';
+import { makeWsUrlWithToken } from '@/lib/utils';
+import type { GameState, UserResponse } from '@/types';
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export const teamColors = ['blue', 'red'] as const;
@@ -37,6 +38,8 @@ export type ServerMessage = EventUnion<ServerEventMap>;
 export type ClientMessage = EventUnion<ClientEventMap>;
 
 type Options = {
+  user: UserResponse | null;
+  gameId?: string;
   reconnect?: boolean;
   reconnectInterval?: number;
   onOpenCallback?: (socket: WebSocket) => void;
@@ -46,8 +49,10 @@ type Options = {
 export function useWebSocket<
   TIn extends { type: string },
   TOut extends { type: string }
->(url: string, options: Options = {}) {
+>(options: Options) {
   const {
+    user,
+    gameId,
     reconnect = true,
     reconnectInterval = 3000,
 
@@ -61,8 +66,8 @@ export function useWebSocket<
   const [lastMessage, setLastMessage] = useState<TOut | null>(null);
 
   const connect = useCallback(() => {
-    if (wsRef.current) return;
-
+    if (wsRef.current || !gameId) return;
+    const url = makeWsUrlWithToken(gameId);
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
@@ -94,7 +99,7 @@ export function useWebSocket<
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, reconnect, reconnectInterval]);
+  }, [user, gameId, reconnect, reconnectInterval]);
 
   // send is now strictly typed with TIn
   const send = useCallback((msg: TIn) => {
@@ -114,13 +119,17 @@ export function useWebSocket<
   }, []);
 
   useEffect(() => {
+    if (!gameId || !user) {
+      return;
+    }
+
     connect();
     return () => {
       if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [connect]);
+  }, [connect, user, gameId]);
 
   return { isConnected, lastMessage, send, close };
 }
