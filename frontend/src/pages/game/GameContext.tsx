@@ -1,12 +1,12 @@
-import type { GameState, UserResponse } from '@/types';
+import type { GameState, UserResponse } from "@/types";
 
-import React, { createContext, useEffect, useState } from 'react';
-import { useParams } from 'react-router';
+import React, { createContext, useEffect, useState } from "react";
+import { useParams } from "react-router";
 import {
   useWebSocket,
   type ClientMessage,
   type ServerMessage,
-} from '../useWebsocket';
+} from "../useWebsocket";
 
 type UseWebsockets = ReturnType<
   typeof useWebSocket<ClientMessage, ServerMessage>
@@ -14,10 +14,11 @@ type UseWebsockets = ReturnType<
 
 type GameContextType = {
   gameState?: GameState;
-  send: UseWebsockets['send'];
+  send: UseWebsockets["send"];
   isConnected: boolean;
-  close: UseWebsockets['close'];
+  close: UseWebsockets["close"];
 };
+// FIXME: find out if react fast refresh works like it supposed to
 export const GameContext = createContext<GameContextType>({
   isConnected: false,
   send: () => {},
@@ -38,7 +39,7 @@ export function GameContextProvider({
   // TODO: handle case when you didnt get game state
   const [gameState, setGameState] = useState<GameState>();
 
-  let { gameId } = useParams();
+  const { gameId } = useParams();
   // FIXME: better gameId parameter validation
   const { lastMessage, isConnected, close, send } = useWebSocket<
     ClientMessage,
@@ -49,7 +50,7 @@ export function GameContextProvider({
     reconnect: false,
     onOpenCallback: (socket) =>
       OnSocketOpen(socket, {
-        type: 'join_game',
+        type: "join_game",
         data: undefined,
         game_id: gameId,
       }),
@@ -59,12 +60,12 @@ export function GameContextProvider({
     if (!lastMessage) return;
 
     switch (lastMessage.type) {
-      case 'game_state':
+      case "game_state":
         setGameState(lastMessage.data);
-        console.log('Game state update:', lastMessage.data);
+        console.log("Game state update:", lastMessage.data);
         break;
-      case 'error':
-        console.error('Error:', lastMessage.data);
+      case "error":
+        console.error("Error:", lastMessage.data);
         break;
     }
   }, [lastMessage]);
